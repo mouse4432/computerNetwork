@@ -38,6 +38,7 @@ int main(int argc, char *argv[])
 	int serv_sock, clnt_sock;
 	struct sockaddr_in serv_adr, clnt_adr;
 	int clnt_adr_sz;
+	int str_len = 0;
 	pthread_t t_id;
 	if (argc != 2)
 	{
@@ -57,9 +58,10 @@ int main(int argc, char *argv[])
 		error_handling("bind() error");
 	if (listen(serv_sock, 5) == -1)
 		error_handling("listen() error");
-	printf("------------------------------------------\n");
+	printf("--------------------------------------------------------------\n");
 	printf("\t\tK-OTT Service\n");
-	printf("------------------------------------------\n");
+	printf("--------------------------------------------------------------\n");
+	memset(&data, 0, sizeof(data));
 	while (1)
 	{
 		clnt_adr_sz = sizeof(clnt_adr);
@@ -69,9 +71,27 @@ int main(int argc, char *argv[])
 		clnt_socks[clnt_cnt++] = clnt_sock;
 		pthread_mutex_unlock(&mutx);
 
-		pthread_create(&t_id, NULL, handle_clnt, (void *)&clnt_sock);
-		pthread_detach(t_id);
+		str_len = read(clnt_sock, &data, sizeof(data));
+		if(data.command == 0){
+			pthread_create(&t_id, NULL, handle_clnt, (void *)&clnt_sock);
+			pthread_detach(t_id);
+		}
+			
 		printf("Connected client IP: %s, clnt_sock=%d \n", inet_ntoa(clnt_adr.sin_addr), clnt_sock);
+		str_len = read(clnt_sock, &data, sizeof(data));
+	
+		if (data.command == 3)
+		{
+			if (data.type == 1)
+				printf("\nTotal Tx Bytes: %d to Client %d (Basic)\n", data.len, clnt_sock);
+			else if (data.type == 2)
+				printf("\nTotal Tx Bytes: %d to Client %d (Standard)\n", data.len, clnt_sock);
+			else if (data.type == 3)
+				printf("\nTotal Tx Bytes: %d to Client %d (Premium)\n", data.len, clnt_sock);
+
+			printf("[Rx] FILE_END_ACK from Client %d => clnt_sock: %d closed\n", clnt_sock, clnt_sock);
+			
+		}
 	}
 	close(serv_sock);
 	return 0;
@@ -83,11 +103,10 @@ void *handle_clnt(void *arg)
 	int str_len = 0, i;
 	int file;
 
-	memset(&data, 0, sizeof(data));
-	str_len = read(clnt_sock, &data, sizeof(data));
 	
-	if (data.command == 0)
-	{
+	
+	
+	
 		file = open("hw06.mp4", O_RDONLY);
 	
 		while (1)
@@ -102,7 +121,6 @@ void *handle_clnt(void *arg)
 					break;
 				}
 				data.command = 1;
-
 				data.len += str_len;
 			}
 			else if (data.type == 2)
@@ -133,37 +151,25 @@ void *handle_clnt(void *arg)
 			send_msg(data, sizeof(data));
 		}
 		
-	}
-	str_len = read(clnt_sock, &data, sizeof(data));
-	if (data.command == 3)
+	
+	
+	pthread_mutex_lock(&mutx);
+	for (i = 0; i < clnt_cnt; i++) // remove disconnected client
 	{
-		pthread_mutex_lock(&mutx);
-		for (i = 0; i < clnt_cnt; i++) // remove disconnected client
+			
+		if (clnt_sock == clnt_socks[i])
 		{
-			if (data.type == 1)
-				printf("Total Tx Bytes: %d to Client %d (Basic)\n", data.len, clnt_sock);
-
-			else if (data.type == 2)
-				printf("Total Tx Bytes: %d to Client %d (Standard)\n", data.len, clnt_sock);
-
-			else if (data.type == 3)
-				printf("Total Tx Bytes: %d to Client %d (Premium)\n", data.len, clnt_sock);
-
-			printf("[Rx] FILE_END_ACK form Client %d => clnt_sock: %d closed\n", clnt_sock, clnt_sock);
-			if (clnt_sock == clnt_socks[i])
+			while (i < clnt_cnt)
 			{
-				while (i < clnt_cnt)
-				{
-					clnt_socks[i] = clnt_socks[i + 1];
-					i++; // 클라이언트 종료시점에 무한루프 발생 문제점 수정
-				}
-				break;
+				clnt_socks[i] = clnt_socks[i + 1];
+				i++; // 클라이언트 종료시점에 무한루프 발생 문제점 수정
 			}
+			break;
 		}
-		clnt_cnt--;
-		pthread_mutex_unlock(&mutx);
-		close(clnt_sock);
 	}
+	clnt_cnt--;
+	pthread_mutex_unlock(&mutx);
+	close(clnt_sock);
 
 	return NULL;
 }

@@ -33,6 +33,9 @@ int main(int argc, char *argv[])
 	struct sockaddr_in serv_addr;
 	pthread_t rcv_thread;
 	void *thread_return;
+	struct timespec start, end;
+	unsigned long long t1, t2;
+	unsigned long long nano = 1000000000;
 	if (argc != 3)
 	{
 		printf("Usage : %s <IP> <port>\n", argv[0]);
@@ -53,11 +56,11 @@ int main(int argc, char *argv[])
 	while (1)
 	{
 		memset(&data, 0, sizeof(data));
-		printf("------------------------------------------\n");
+		printf("--------------------------------------------------------------\n");
 		printf("\t\tK-OTT Service\n");
-		printf("------------------------------------------\n");
+		printf("--------------------------------------------------------------\n");
 		printf(" Choose a subscribe type\n");
-		printf("------------------------------------------\n");
+		printf("--------------------------------------------------------------\n");
 		printf("1: Basic, 2: Standard, 3: Premium, 4: quit: ");
 		scanf("%d", &data.type);
 		if (data.type == 4)
@@ -65,7 +68,7 @@ int main(int argc, char *argv[])
 			printf("Exit program\n");
 			exit(1);
 		}
-		printf("------------------------------------------\n");
+		printf("--------------------------------------------------------------\n");
 		printf("1. Download, 2: Back to Main menu: ");
 		scanf("%d", &func);
 		if (func == 1)
@@ -75,10 +78,13 @@ int main(int argc, char *argv[])
 	
 	data.command = 0;
 	write(sock, &data, sizeof(data));
-
+	clock_gettime(CLOCK_REALTIME, &start);
+	t1 = start.tv_nsec + start.tv_sec * nano;
 	pthread_create(&rcv_thread, NULL, recv_msg, (void *)&sock);
 
 	pthread_join(rcv_thread, &thread_return);
+	clock_gettime(CLOCK_REALTIME, &end);
+	t2 = end.tv_nsec + end.tv_sec * nano;
 
 	if (data.command == 2)
 	{
@@ -87,7 +93,7 @@ int main(int argc, char *argv[])
 	}
 	printf("\nFile Transmission Finished\n");
 	printf("Total received bytes: %d\n", data.len);
-	printf("Downlaoding time: x msec\n");
+	printf("Downlaoding time: %lld msec\n", (t2-t1)/1000000);
 	printf("Client closed\n");
 	close(sock);
 	return 0;
